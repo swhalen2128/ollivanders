@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<title>Ollivanders</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel=stylesheet href="base.css"/>
+</head>
+<body>
+
+<script src="Three.js"></script>
+<script src="Detector.js"></script>
+<script src="Stats.js"></script>
+<script src="OrbitControls.js"></script>
+<script src="THREEx.KeyboardState.js"></script>
+<script src="THREEx.FullScreen.js"></script>
+<script src="THREEx.WindowResize.js"></script>
+
+<!-- Added for particle engine -->
+<script src="ParticleEngine.js"></script>
+<script src="ParticleEngineExamples.js"></script>
+
+
+<script type='text/javascript' src='DAT.GUI.min.js'></script>
+
+
+<!-- jQuery code to display an information button and box when clicked. -->
+<script src="jquery-1.9.1.js"></script>
+<script src="jquery-ui.js"></script>
+<link rel=stylesheet href="jquery-ui.css" />
+<link rel=stylesheet href="info.css"/>
+<script src="info.js"></script>
+<div id="infoButton"></div>
+<div id="infoBox" title="Demo Information">
+This three.js demo is part of a collection at
+<a href="http://stemkoski.github.io/Three.js/">http://stemkoski.github.io/Three.js/</a>
+</div>
+<!-- ------------------------------------------------------------ -->
+
+<div id="ThreeJS" style="position: absolute; left:0px; top:0px"></div>
+<script>
+			
+var container, scene, camera, renderer, controls, stats;
+var keyboard = new THREEx.KeyboardState();
+var clock = new THREE.Clock();
+
+var cube;
+var wall;
+var wallR;
+var wallL;
+var gui;
+var param;
+
+var objects = [];     //contains objects for selective picking       
+var bookshelf = {};   //holds objects creating bookshelves 
+var boxes = {};       //all wand boxes
+   
+var write = false; //animate feather
+var open = false;  //open box
+var moveBox = false; //move wand box
+var sparks = false; //turn on sparks
+
+var box6; //animated wand box, picking
+var suit1; var suit2;
+var suitcaseTop;
+var feather;
+var t = 0;
+
+//textures for importing blender objects 
+var globaltexture1;
+var globaltexture2;
+var globaltexture3;
+var globaltexture4;
+var globaltexture5;
+var globaltexture6;
+
+init();
+animate();	
+
+
+function init() {
+
+	scene = new THREE.Scene();
+	
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	scene.add(camera);
+	camera.position.set(0,150,700);
+	camera.lookAt(scene.position);	
+	
+	// RENDERER
+	if ( Detector.webgl )
+		renderer = new THREE.WebGLRenderer( {antialias:true} );
+	else
+		renderer = new THREE.CanvasRenderer(); 
+	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+	container = document.getElementById( 'ThreeJS' );
+	container.appendChild( renderer.domElement );
+	
+	// EVENTS
+	THREEx.WindowResize(renderer, camera);
+	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+	
+	// CONTROLS
+	controls = new THREE.OrbitControls( camera, renderer.domElement );
+	
+	// STATS
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.bottom = '0px';
+	stats.domElement.style.zIndex = 100;
+	container.appendChild( stats.domElement );
+	
+	//LIGHT	
+	var light = new THREE.PointLight(0xffffff);
+	light.position.set(-300,500,800);
+	scene.add(light);
+	
+	
+	// FLOOR
+	var floorTexture = new THREE.ImageUtils.loadTexture( 'darkwood2.jpg' );
+	floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; 
+	floorTexture.repeat.set( 10, 10 );
+	var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
+	var floorGeometry = new THREE.PlaneGeometry(1400, 1000, 10, 10);
+	var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+	floor.position.y = -400;
+	floor.rotation.x = Math.PI / 2;
+	scene.add(floor);
+	
+	// SKYBOX/FOG
+	var skyBoxGeometry = new THREE.CubeGeometry( 1400, 1000, 1000 );
+	var skyBoxMaterial = new THREE.MeshBasicMaterial( { color: 0x2b1d0e, side: THREE.BackSide } );
+	var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
+	scene.add(skyBox);
+	scene.fog = new THREE.FogExp2( 0x111111, 0.00025 );
+	
+	//for selective picking
+    document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+
+    this.engine = new ParticleEngine(); //particle engine used for sparks
+	engine.setValues( Examples.fountain );
+	engine.initialize();
+
+	//lamp
+   	var glassTexture = THREE.ImageUtils.loadTexture( 'glass.jpg'); //lamp texture 
+	var geometry = new THREE.SphereGeometry( 50, 52, 36 );
+	var material = new THREE.MeshPhongMaterial( { color: 0xffffcc, transparent: true, opacity: 0.35, map: glassTexture} );		// phong material for lamp base texture; color is a soft gold 
+	mesh = new THREE.Mesh( geometry, material );
+	mesh.position.set(-490,20,-130);
+	scene.add(mesh);
+
+	
+	// SIMPLE GLOW EFFECT
+	// use sprite because it appears the same from all angles
+	var spriteMaterial = new THREE.SpriteMaterial( 
+	{ 
+		map: new THREE.ImageUtils.loadTexture( 'glow.png' ), 
+		useScreenCoordinates: false, alignment: THREE.SpriteAlignment.center,
+		color:0xfff7cc, transparent: true, blending: THREE.AdditiveBlending  //0xfff7cc
+	});
+	var sprite = new THREE.Sprite( spriteMaterial );
+	sprite.scale.set(200, 200, -100);
+	mesh.add(sprite); // this centers the glow at center
+
+
+	initWandBoxes();
+	initBookshelf();
+	
+	//blender objects, blender texture
+	installModel("Table.json", "wood.jpg");
+	installModel("wandTextured.json", "wand.jpg");
+	installModel("inkwellTextured.json", "inkwell.jpg");
+	installModel("suitcase1.json", "suitcase1.jpg");
+	installModel("suitcase2.json", "suitcase2.jpg");
+	installModel("featherTexture.json", "whiteFeather.jpg");
+				
+	//blender object, three.js texture applied			
+	var geometry = new THREE.CubeGeometry( 100, 100, 100 );
+	var darkMaterial = new THREE.MeshBasicMaterial( { color: 0x201200 });
+    
+	var loader = new THREE.JSONLoader();
+    loader.load( 'models/lamp.json', function ( geometry ) {
+    var mesh = new THREE.Mesh( geometry, new THREE.MeshPhongMaterial({ color: 0x4c4000}) );
+                        mesh.position.x =-500;
+                        mesh.position.y =-100;
+                        mesh.position.z =-130;
+                        mesh.scale.set(50,50,50);
+    scene.add( mesh ); });
+    
+    var PI2 = Math.PI * 2;
+	projector = new THREE.Projector();
+    container.appendChild( renderer.domElement );
+	render();                
+
+}
+			
+
+function installModel(file, texture) {
+    var loader = new THREE.JSONLoader();
+	if (texture == "wood.jpg")
+	{
+		globaltexture1 = 'models/textures/'+ texture;
+		loader.load('models/'+file, modelLoadedCallback);
+	}
+	if (texture == "inkwell.jpg")
+	{
+		globaltexture2 = 'models/textures/'+ texture;
+		loader.load('models/'+file, modelLoadedCallback2);
+	}
+	
+	if (texture == "wand.jpg")
+	{
+		globaltexture3 = 'models/textures/'+ texture;
+		loader.load('models/'+file, modelLoadedCallback3);
+	}
+	
+	if (texture == "whiteFeather.jpg")
+	{
+		globaltexture4 = 'models/textures/'+ texture;
+		loader.load('models/'+file, modelLoadedCallback4);
+	}
+	
+	if (texture == "suitcase1.jpg")
+	{
+		 globaltexture5 = 'models/textures/'+ texture;
+		loader.load('models/'+file, modelLoadedCallback5);
+	}
+	
+	if (texture == "suitcase1.jpg")
+	{
+		 globaltexture6 = 'models/textures/'+ texture;
+		loader.load('models/'+file, modelLoadedCallback6);
+	}	
+}
+
+//import Table from Blender
+function modelLoadedCallback(geometry, materials) {    
+      var material = new THREE.MeshLambertMaterial({
+      map: THREE.ImageUtils.loadTexture(globaltexture1),
+        colorAmbient: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorDiffuse: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorSpecular: [0.8999999761581421, 0.8999999761581421, 0.8999999761581421]
+      });
+
+     var object = new THREE.Mesh(geometry,material);    
+   
+    table = new THREE.Object3D();
+    table.add(object);
+    table.scale.set(60, 60, 100);
+    table.position.x =-100;
+    table.position.y =-270;
+    table.position.z =-200;
+    table.rotation.y = Math.PI / 2;
+
+    table.receiveShadow = true;
+    table.castShadow = true;
+    scene.add(table);
+  
+    render();
+}
+
+//import inkwell from blender
+function modelLoadedCallback2(geometry, materials) {
+      var material = new THREE.MeshLambertMaterial({
+        map: THREE.ImageUtils.loadTexture(globaltexture2),
+        colorAmbient: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorDiffuse: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorSpecular: [0.8999999761581421, 0.8999999761581421, 0.8999999761581421]
+      });
+
+    var object = new THREE.Mesh(geometry, material);    
+      
+    mesh = new THREE.Object3D();
+    mesh.add(object);
+    mesh.position.x =-380;
+    mesh.position.y =-130;
+    mesh.position.z =-130;
+    mesh.scale.set(25,25,25);
+    
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    scene.add(mesh);
+    render();
+}
+
+//import wands from blender
+function modelLoadedCallback3(geometry, materials) {
+      var material = new THREE.MeshLambertMaterial({
+        map: THREE.ImageUtils.loadTexture(globaltexture3),
+        colorAmbient: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorDiffuse: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorSpecular: [0.8999999761581421, 0.8999999761581421, 0.8999999761581421]
+      });
+
+	//wand1
+    object = new THREE.Mesh(geometry, material);
+    object.position.x =-50;
+    object.position.y =-100;
+    object.position.z =-130;
+    object.rotation.y = 4 *(Math.PI)/3;
+    object.scale.set(70,70,70);    
+    
+    objects.push(object); //can click on this wand
+    
+    var wandInBox = new THREE.Mesh(geometry, material);
+    wandInBox.position.x =40;
+    wandInBox.position.y =-150;
+    wandInBox.position.z =-130;
+    wandInBox.rotation.y = Math.PI/2
+    wandInBox.scale.set(50,50,65); 
+    
+    var wand2 = new THREE.Mesh(geometry, material);
+    wand2.position.x =-290;
+    wand2.position.y =-165;
+    wand2.position.z =-130;
+    wand2.scale.set(50,50,50);
+   
+    var wand3 = new THREE.Mesh(geometry, material);
+	wand3.position.x =-270;
+    wand3.position.y =-165;
+    wand3.position.z =-45;
+    wand3.rotation.y = Math.PI;
+    wand3.scale.set(50,50,50);
+
+   	var wand4 = new THREE.Mesh(geometry, material);
+	wand4.position.x =-240;
+    wand4.position.y =-165;
+    wand4.position.z =-130;
+	wand4.scale.set(50,50,50);
+    
+    mesh = new THREE.Object3D();
+    mesh.add(object);
+    mesh.add(wand2);
+    mesh.add(wand3);
+    mesh.add(wand4);
+    mesh.add(wandInBox);
+    
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    scene.add(mesh);
+    render();
+}
+
+//import quill from blender
+function modelLoadedCallback4(geometry, materials) {    
+      var material = new THREE.MeshLambertMaterial({
+      map: THREE.ImageUtils.loadTexture(globaltexture4),
+        colorAmbient: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorDiffuse: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorSpecular: [0.8999999761581421, 0.8999999761581421, 0.8999999761581421]
+      });
+
+	feather = new THREE.Mesh(geometry,material);    
+    feather.position.x =-390;
+    feather.position.y =-135;
+    feather.position.z =-140;
+    feather.rotation.y = -Math.PI/4;
+    feather.scale.set(5,5,5);
+   
+   	objects.push(feather);
+   	
+    mesh = new THREE.Object3D();
+    mesh.add(feather);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    console.log("texture used " + globaltexture4);
+    scene.add(mesh);
+    render();
+}
+
+//import bottom of suitcase
+function modelLoadedCallback5(geometry, materials) {    
+      var material = new THREE.MeshLambertMaterial({
+      map: THREE.ImageUtils.loadTexture(globaltexture5),
+        colorAmbient: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorDiffuse: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorSpecular: [0.8999999761581421, 0.8999999761581421, 0.8999999761581421]
+      });
+
+    var suitcaseBottom = new THREE.Mesh(geometry,material);    
+   	suitcaseBottom.position.x =175;
+    suitcaseBottom.position.y = -170;
+    suitcaseBottom.position.z =-115;
+    suitcaseBottom.rotation.y = Math.PI / 2;
+    suitcaseBottom.scale.set(50,50,50);
+   
+    mesh = new THREE.Object3D();
+    mesh.add(suitcaseBottom);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    scene.add(mesh);
+    
+    render();
+}
+
+//import top of suitcase
+function modelLoadedCallback6(geometry, materials) {    
+      var material = new THREE.MeshLambertMaterial({
+      map: THREE.ImageUtils.loadTexture(globaltexture6),
+        colorAmbient: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorDiffuse: [0.480000026226044, 0.480000026226044, 0.480000026226044],
+        colorSpecular: [0.8999999761581421, 0.8999999761581421, 0.8999999761581421]
+      });
+
+    suitcaseTop = new THREE.Mesh(geometry,material);    
+   	suitcaseTop.position.x = 175;
+	suitcaseTop.position.y = -20;
+    suitcaseTop.position.z =-115;
+    suitcaseTop.rotation.y = Math.PI/2;
+    suitcaseTop.rotation.x = Math.PI;
+    suitcaseTop.scale.set(50,30,50);
+   	   	
+   	objects.push(suitcaseTop);
+
+    mesh = new THREE.Object3D();
+    mesh.add(suitcaseTop);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    console.log("texture used " + globaltexture6);
+    scene.add(mesh);
+    
+    render();
+}
+
+
+function initWandBoxes()
+{
+	var boxNum = "box";
+	
+	var boxTexture3 = new THREE.ImageUtils.loadTexture( 'wandboxR.png' );
+	var boxTexture2 = new THREE.ImageUtils.loadTexture( 'wandboxG.png' );
+	var boxTexture4 = new THREE.ImageUtils.loadTexture( 'wandboxQ.png' );
+	var boxTexture1 = new THREE.ImageUtils.loadTexture( 'wandboxB.png' );
+	
+	var boxMaterial = [new THREE.MeshBasicMaterial( { map: boxTexture1 } ),
+					   new THREE.MeshBasicMaterial( { map: boxTexture2 } ),
+					   new THREE.MeshBasicMaterial( { map: boxTexture3 } ), 
+					   new THREE.MeshBasicMaterial( { map: boxTexture4 } )];
+	
+	for (var j = 0; j < 6; j ++)
+	{
+		for (var i = 0; i < 5; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var zPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(40, 30, 100, 1, 1, 1), boxMaterial[1] );
+			var xPos = -160 + (50 * i);
+			var yPos = -30 + (35 * j);
+	    	boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+	
+	for (var j = 0; j < 4; j ++)
+	{
+		for (var i = 5; i < 8; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var zPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(40, 30, 100, 1, 1, 1), boxMaterial[0] );
+			var xPos = -160 + (50 * i);
+			var yPos = -30 + (35 * j);
+	    	boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+	
+	for (var j = 6; j < 8; j ++)
+	{
+		for (var i = 0; i < 5; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var zPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(40, 30, 100, 1, 1, 1), boxMaterial[2] );
+			var xPos = -160 + (50 * i);
+			var yPos = -30 + (35 * j);
+	    	boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    	boxes.boxNum.rotation.z = -Math.PI / 8;
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+	
+	for (var j = 4; j < 8; j ++)
+	{
+		for (var i = 5; i < 6; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var zPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(40, 30, 100, 1, 1, 1), boxMaterial[3] );
+			var xPos = -160 + (50 * i);
+			var yPos = -30 + (35 * j);
+	    	boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+	
+	for (var j = 0; j < 5; j ++)
+	{
+		for (var i = 8; i < 9; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var zPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(60, 50, 120, 1, 1, 1), boxMaterial[1] );
+			var xPos = -140 + (50 * i);
+			var yPos = -20 + (55 * j);
+	    	boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+	
+	for (var j = 4; j < 6; j ++) //j = height 
+	{
+		for (var i = 6; i < 7; i++) // i = across
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var zPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(100, 50, 100, 1, 1, 1), boxMaterial[0] );
+			var xPos = -130 + (50 * i);
+			var yPos = -100 + (53 * j);
+	    	boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+	
+	for (var j = 7; j < 8; j ++)
+	{
+		for (var i = 6; i < 8; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var zPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(40, 30, 100, 1, 1, 1), boxMaterial[2] );
+			var xPos = -160 + (50 * i);
+			var yPos = -30 + (35 * j);
+	    	boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+	
+	//second shelf -- blue
+	for (var j = 0; j < 10; j ++)
+	{
+			for (var i = 0; i < 10 - j; i++) 
+			{
+				if (i === 7 && j === 2){}
+				else {
+				var num = Math.floor(Math.random()*3)-1;
+				var zPos = 5*num;
+	    		boxNum = "box" + i + j;
+	    		boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(30, 20, 80, 1, 1, 1), boxMaterial[0]);
+				var xPos = -570 + (35 * i);
+				var yPos = -30 + (25 * j);
+	    		boxes.boxNum.position.set(xPos, yPos, -430+zPos);
+	    		scene.add(boxes.boxNum);}
+	    	}		
+	}
+	//box that is animated
+	box6 = new THREE.Mesh( 
+	new THREE.CubeGeometry(30, 20, 80, 1, 1, 1), boxMaterial[0] );
+	box6.position.set(-325, 20, -430);
+	scene.add( box6 );
+	objects.push(box6);
+
+	//second shelf -- blue
+	for (var j = 0; j < 6; j ++)
+	{
+			for (var i = 0; i < 5 - j; i++) 
+			{
+				var num = Math.floor(Math.random()*3)-1;
+				var zPos = 5*num;
+	    		boxNum = "box" + i + j;
+	    		boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(40, 30, 100, 1, 1, 1), boxMaterial[0]);
+				var xPos = -160 + (50 * i);
+				var yPos = 270 + (35 * j);
+	    		boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    		scene.add(boxes.boxNum);
+	    	}		
+	}
+	
+	for (var j = 0; j < 5; j ++)
+	{
+			for (var i = 0; i < 3; i++) 
+			{
+				var num = Math.floor(Math.random()*3)-1;
+				var zPos = 5*num;
+	    		boxNum = "box" + i + j;
+	    		boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(50, 30, 100, 1, 1, 1), boxMaterial[1]);
+				var xPos = 270 - (60 * i);
+				var yPos = 270 + (40 * j);
+	    		boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    		scene.add(boxes.boxNum);
+	    	}		
+	}
+	
+	for (var j = 0; j < 3; j ++)
+	{
+			for (var i = 0; i < 3; i++) 
+			{
+					var num = Math.floor(Math.random()*3)-1;
+					var zPos = 5*num;
+	    			boxNum = "box" + i + j;
+	    			boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(90, 50, 90, 1, 1, 1), boxMaterial[1]);
+					var xPos = -540 + (100 * i);
+					var yPos = 285 + (55 * j);
+	    			boxes.boxNum.position.set(xPos, yPos, -440+zPos);
+	    			scene.add(boxes.boxNum);
+	    		
+	    	}		
+	}
+
+	//side -- red
+	for (var j = 0; j < 14; j ++)
+	{
+		for (var i = 0; i < 9; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var xPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	if (j < 8)
+	    		boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(100, 30, 40, 1, 1, 1), boxMaterial[2] );
+	    	else
+	    		boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(100, 30, 40, 1, 1, 1), boxMaterial[3] );
+
+			var yPos = 150 + (30 * i);
+			var zPos = -340 + (45 * j);
+	    	boxes.boxNum.position.set(-640+xPos, yPos, zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+
+	for (var j = 0; j < 7; j ++)
+	{
+		for (var i = 0; i < 4; i++)
+		{
+			var num = Math.floor(Math.random()*3)-1;
+			var xPos = 5*num;
+	    	boxNum = "box" + i + j;
+	    	boxes.boxNum = new THREE.Mesh(new THREE.CubeGeometry(100, 50, 60, 1, 1, 1), boxMaterial[1] );
+			var yPos = -100 + (55 * i);
+			var zPos = -340 + (65 * j);
+	    	boxes.boxNum.position.set(-640+xPos, yPos, zPos);
+	    	scene.add(boxes.boxNum);		
+		}
+	}
+}
+			
+function initBookshelf()
+{
+	var darkMaterial = new THREE.MeshBasicMaterial( { color:0x201200 });
+	
+	//back bottom shelf
+	bookshelf.shelf1 = new THREE.Mesh( 
+		new THREE.CubeGeometry(900, 10, 100, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.shelf1.position.set(-150, -50, -450);
+	scene.add(bookshelf.shelf1);
+	
+	//back top shelf
+	bookshelf.shelf2 = new THREE.Mesh( 
+		new THREE.CubeGeometry(900, 10, 100, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.shelf2.position.set(-150, 250, -450);
+	scene.add( bookshelf.shelf2 );
+
+	//side bottom shelf
+	bookshelf.shelf3 = new THREE.Mesh( 
+		new THREE.CubeGeometry(100, 10, 700, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.shelf3.position.set(-650, -130, -50);
+	scene.add( bookshelf.shelf3 );
+	
+	//side top shelf
+	bookshelf.shelf4 = new THREE.Mesh( 
+		new THREE.CubeGeometry(100, 10, 700, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.shelf4.position.set(-650, 125, -50);
+	scene.add(bookshelf.shelf4);
+	
+	//back divider
+	bookshelf.backDivider = new THREE.Mesh( 
+		new THREE.CubeGeometry(10, 850, 100, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.backDivider.position.set(-200, 25, -450);
+	scene.add(bookshelf.backDivider);
+	
+	//left bookcase    
+	bookshelf.left = new THREE.Mesh( 
+		new THREE.CubeGeometry(100, 850, 100, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.left.position.set(-650, 25, -450);
+	scene.add( bookshelf.left );
+	
+	//back right
+	bookshelf.right = new THREE.Mesh( 
+		new THREE.CubeGeometry(10, 850, 100, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.right.position.set(300, 25, -450);
+	scene.add(bookshelf.right);
+	
+	//front left bookcase
+	bookshelf.leftFront = new THREE.Mesh( 
+		new THREE.CubeGeometry(100, 850, 10, 1, 1, 1), 
+		darkMaterial );
+	bookshelf.leftFront.position.set(-650, 25, 300);
+	scene.add(bookshelf.leftFront);
+}
+
+
+function onDocumentMouseDown( event ) 
+{                
+    var mouse3D = new THREE.Vector3( ( event.clientX / window.innerWidth ) * 2 - 1,   //x
+                     -( event.clientY / window.innerHeight ) * 2 + 1,  //y
+                        0.5 );                                   //z
+                          
+    projector.unprojectVector( mouse3D, camera );   
+    mouse3D.sub( camera.position );                
+    mouse3D.normalize();
+    var raycaster = new THREE.Raycaster( camera.position, mouse3D );
+    var intersects = raycaster.intersectObjects( objects );
+
+    if ( intersects.length > 0 )
+    {
+		var bool = intersects[0].object instanceof THREE.Mesh;
+		if (intersects[0].object instanceof THREE.Mesh)
+		{
+			if (intersects[0].object.position.x === -50)
+			{
+				if (sparks)
+					sparks = false;
+				else
+				 	sparks = true;
+				update();
+			}
+			else if (intersects[0].object.position.x === -390)
+			{
+				if (write)
+                	write = false;
+                else
+                	write = true;
+                updateFeather();			
+						
+			}
+			else if (intersects[0].object.position.x === 175)
+            {
+            	open = true;	
+                updateBox();
+            }	
+            else if (intersects[0].object.position.x === -325)
+            {
+				moveBox = true;
+				updateWandBox();				
+			}
+                	
+    	}
+    }
+
+    render();
+
+}
+
+function animate() 
+{
+    requestAnimationFrame( animate );
+	render();		
+	update();
+	updateFeather(); 
+	updateBox();
+	updateWandBox();
+}
+
+function restartEngine(parameters)
+{
+	resetCamera();
+	
+	engine.destroy();
+	engine = new ParticleEngine();
+	engine.setValues( parameters );
+	engine.initialize();
+}	
+
+//updates the sparks 
+function update()
+{
+	var dt = clock.getDelta();
+	if (sparks) 
+	{
+		engine.update(dt * 1);
+	}
+
+	controls.update();
+	stats.update();	
+}
+
+
+function updateFeather()
+{
+	var dt = clock.getDelta(); 
+
+	var speed=dt*30;
+	var speed1=dt*15;
+	var ran = Math.random()*10;
+	if(write) 
+	{
+		if(feather.position.y<=-50){
+			feather.position.y+=dt*800;
+		}
+		if(ran<=5)
+		{
+			speed1*=-1;
+		}
+		feather.position.x+=speed1;
+	}			
+	controls.update();
+	stats.update();
+}
+
+function updateBox()
+{
+	var dt = clock.getDelta();
+	
+	if(open){
+		if(suitcaseTop.position.z>=-169){
+			suitcaseTop.position.z-=dt*950;
+		}
+	
+		if(suitcaseTop.rotation.x>=3*Math.PI / 4){
+			suitcaseTop.rotation.x-=dt*30;
+		}
+		
+		if(suitcaseTop.position.y<=-1){
+			suitcaseTop.position.y+=dt*500;
+		}
+	}	
+	controls.update();
+	stats.update();
+
+}
+
+function updateWandBox()
+{
+  var dt = clock.getDelta(); 
+  if (moveBox) 
+  {		
+		if(box6.position.z<=-75)
+		{
+			box6.position.z+=dt*10000;
+		}
+		
+		if (box6.position.x <= -150)
+		{
+			box6.position.x += dt*10000;
+		}
+		
+		if (box6.position.y >= -130)
+		{
+			box6.position.y -= dt*10000;
+		}
+	}
+	controls.update();
+	stats.update();
+}
+
+function render() {				
+	renderer.render( scene, camera );
+}
+
+		</script>
+
+	</body>
+
+</html>
+

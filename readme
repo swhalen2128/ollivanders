@@ -1,0 +1,13 @@
+UI Read Me: Ollivander's Wand Shop
+Emma, Sam, Cary 
+
+Our scene has a few objects that we used selective picking on so that the user is able to interact with them.
+	-When clicking the feather, it will hover above the inkwell
+	-When clicking the floating wand, it will shoot out sparks
+	-When clicking the top of the box on the table, it will open and you can see the 	wand inside
+	-When clicking on a wand box,it will move from the shelf towards the table (you 	can find this box in the blue boxes on the back left.  It is on top of the third 	row from the right
+
+
+This project is able to run on Firefox. 
+
+“Of course it is happening inside your head, Harry, but why on earth should that mean that it is not real?” - Dumbledore
